@@ -122,7 +122,7 @@ class Chart(abstract.AbstractChart):
             self._idle_thread.start()
 
     def is_alive_check(self):
-        while self._process.is_alive():
+        while not self._exit.is_set():
             time.sleep(1)
         print("process no longer alive. exiting")
         self.exit()
