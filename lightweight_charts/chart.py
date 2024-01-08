@@ -1,5 +1,7 @@
 import asyncio
+import time
 import multiprocessing as mp
+from threading import Thread
 import webview
 
 from lightweight_charts import abstract
@@ -72,6 +74,7 @@ class Chart(abstract.AbstractChart):
     _exit, _start = (mp.Event() for _ in range(2))
     _q, _emit_q, _return_q = (mp.Queue() for _ in range(3))
     _loaded_list = [mp.Event() for _ in range(MAX_WINDOWS)]
+    _idle_thread: Thread
 
     def __init__(self, width: int = 800, height: int = 600, x: int = None, y: int = None, title: str = '',
                  screen: int = None, on_top: bool = False, maximize: bool = False, debug: bool = False,
@@ -109,8 +112,20 @@ class Chart(abstract.AbstractChart):
             self.win.on_js_load()
         else:
             self._q.put((self._i, 'show'))
+
         if block:
             asyncio.run(self.show_async(block=True))
+        else:
+            self._idle_thread = Thread(group=None, target=self.is_alive_check,
+                                       name="%s-reader" % self.name,
+                                       args=(), kwargs={}, daemon=None)
+            self._idle_thread.start()
+
+    def is_alive_check(self):
+        while self._process.is_alive():
+            time.sleep(1)
+        print("process no longer alive. exiting")
+        self.exit()
 
     async def show_async(self, block=False):
         self.show(block=False)
