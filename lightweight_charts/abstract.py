@@ -233,8 +233,11 @@ class SeriesCommon(Pane):
                 change[col] = 'time'
                 break
 
+        subset = list(change.values())
+        if self.name and self.name not in subset:
+            subset.append(self.name)
         df = df.rename(change)
-        df = df.select(change.values())
+        df = df.select(subset)
         pd_df = df.to_pandas()
         return pd_df
 
