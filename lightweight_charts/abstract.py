@@ -4,6 +4,9 @@ from base64 import b64decode
 from datetime import datetime
 from typing import Callable, Union, Literal, List, Optional
 import pandas as pd
+import polars as pl
+
+from .polars_lwc import convert_pl
 
 from .table import Table
 from .toolbox import ToolBox
@@ -205,6 +208,9 @@ class SeriesCommon(Pane):
         return arg
 
     def set(self, df: Optional[pd.DataFrame] = None, format_cols: bool = True):
+        if isinstance(df, pl.DataFrame):
+            df = convert_pl(df, self.name)
+
         if df is None or df.empty:
             self.run_script(f'{self.id}.series.setData([])')
             self.data = pd.DataFrame()
@@ -582,6 +588,10 @@ class Candlestick(SeriesCommon):
         :param df: columns: date/time, open, high, low, close, volume (if volume enabled).
         :param render_drawings: Re-renders any drawings made through the toolbox. Otherwise, they will be deleted.
         """
+        if isinstance(df, pl.DataFrame):
+            # NOTE: Do not pass in name since this is candle stick.
+            df = convert_pl(df)
+
         if df is None or df.empty:
             self.run_script(f'{self.id}.series.setData([])')
             self.run_script(f'{self.id}.volumeSeries.setData([])')
