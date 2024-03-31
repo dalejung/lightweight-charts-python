@@ -207,7 +207,7 @@ class SeriesCommon(Pane):
         arg = self._interval * (arg.timestamp() // self._interval)+self.offset
         return arg
 
-    def set(self, df: Optional[pd.DataFrame] = None, format_cols: bool = True):
+    def set(self, df: Optional[pd.DataFrame | pl.DataFrame] = None, format_cols: bool = True):
         if isinstance(df, pl.DataFrame):
             df = convert_pl(df, self.name)
 
@@ -582,7 +582,7 @@ class Candlestick(SeriesCommon):
 
         # self.run_script(f'{self.id}.makeCandlestickSeries()')
 
-    def set(self, df: Optional[pd.DataFrame] = None, render_drawings=False):
+    def set(self, df: Optional[pd.DataFrame | pl.DataFrame] = None, render_drawings=False):
         """
         Sets the initial data for the chart.\n
         :param df: columns: date/time, open, high, low, close, volume (if volume enabled).
