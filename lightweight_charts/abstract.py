@@ -234,7 +234,7 @@ class SeriesCommon(Pane):
                 break
 
         subset = list(change.values())
-        if self.name and self.name not in subset:
+        if self.name and self.name not in subset and self.name in df.columns:
             subset.append(self.name)
         df = df.rename(change)
         df = df.select(subset)
