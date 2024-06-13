@@ -5,6 +5,7 @@ from base64 import b64decode
 from datetime import datetime
 from typing import Callable, Union, Literal, List, Optional
 import pandas as pd
+import polars as pl
 
 from .table import Table
 from .toolbox import ToolBox
@@ -218,7 +219,32 @@ class SeriesCommon(Pane):
         arg = self._interval * (arg.timestamp() // self._interval)+self.offset
         return arg
 
-    def set(self, df: Optional[pd.DataFrame] = None, format_cols: bool = True):
+    def convert_pl(self, df: pl.DataFrame):
+        ohlcv = ['open', 'high', 'low', 'close', 'volume']
+        change = {}
+        for col in df.columns:
+            if col.lower() in ohlcv:
+                change[col] = col.lower()
+
+        ts_cols = ['time', 'date', 'timestamp']
+
+        for col in df.columns:
+            if col.lower() in ts_cols:
+                change[col] = 'time'
+                break
+
+        subset = list(change.values())
+        if self.name and self.name not in subset and self.name in df.columns:
+            subset.append(self.name)
+        df = df.rename(change)
+        df = df.select(subset)
+        pd_df = df.to_pandas()
+        return pd_df
+
+    def set(self, df: Optional[pd.DataFrame | pl.DataFrame] = None, format_cols: bool = True):
+        if isinstance(df, pl.DataFrame):
+            df = self.convert_pl(df)
+
         if df is None or df.empty:
             self.run_script(f'{self.id}.series.setData([])')
             self.data = pd.DataFrame()
@@ -538,12 +564,15 @@ class Candlestick(SeriesCommon):
 
         # self.run_script(f'{self.id}.makeCandlestickSeries()')
 
-    def set(self, df: Optional[pd.DataFrame] = None, keep_drawings=False):
+    def set(self, df: Optional[pd.DataFrame | pl.DataFrame] = None, keep_drawings=False):
         """
         Sets the initial data for the chart.\n
         :param df: columns: date/time, open, high, low, close, volume (if volume enabled).
         :param keep_drawings: keeps any drawings made through the toolbox. Otherwise, they will be deleted.
         """
+        if isinstance(df, pl.DataFrame):
+            df = self.convert_pl(df)
+
         if df is None or df.empty:
             self.run_script(f'{self.id}.series.setData([])')
             self.run_script(f'{self.id}.volumeSeries.setData([])')
