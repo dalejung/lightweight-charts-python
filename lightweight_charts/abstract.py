@@ -201,7 +201,8 @@ class SeriesCommon(Pane):
         self._set_interval(df)
         if not pd.api.types.is_datetime64_any_dtype(df['time']):
             df['time'] = pd.to_datetime(df['time'])
-        df['time'] = df['time'].astype('int64') // 10 ** 9
+        # pandas allows different backing resolutions. normalize on ns
+        df['time'] = df['time'].dt.as_unit('ns').astype('int64') // 10 ** 9
         return df
 
     def _series_datetime_format(self, series: pd.Series, exclude_lowercase=None):
