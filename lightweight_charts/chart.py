@@ -1,6 +1,7 @@
 import asyncio
 import json
 import multiprocessing as mp
+import time
 import typing
 import webview
 from webview.errors import JavascriptException
@@ -8,6 +9,7 @@ from webview.errors import JavascriptException
 from lightweight_charts import abstract
 from .util import parse_event_message, FLOAT
 
+import sys
 import os
 import threading
 
@@ -33,6 +35,9 @@ class PyWV:
         self.windows: typing.List[webview.Window] = []
         self.loop()
 
+    def handle_closed(self):
+        self.is_alive = False
+        sys.exit()
 
     def create_window(
         self, width, height, x, y, screen=None, on_top=False,
@@ -60,6 +65,7 @@ class PyWV:
         )
 
         self.windows[-1].events.loaded += lambda: self.loaded_event.set()
+        self.windows[-1].events.closed += self.handle_closed
 
 
     def loop(self):
@@ -149,6 +155,7 @@ class WebviewHandler():
 class Chart(abstract.AbstractChart):
     _main_window_handlers = None
     WV: WebviewHandler = WebviewHandler()
+    _idle_thread: threading.Thread
 
     def __init__(
         self,
@@ -188,18 +195,30 @@ class Chart(abstract.AbstractChart):
             window.handlers = Chart._main_window_handlers
             super().__init__(window, inner_width, inner_height, scale_candles_only, toolbox, position=position)
 
+    def is_alive_check(self):
+        while self.WV.wv_process.is_alive():
+            time.sleep(1)
+        self.exit()
+
     def show(self, block: bool = False):
         """
         Shows the chart window.\n
         :param block: blocks execution until the chart is closed.
         """
-        if not self.win.loaded:
+        if not self.win.loaded and not Chart.WV.wv_process.is_alive():
             Chart.WV.start()
             self.win.on_js_load()
         else:
             Chart.WV.show(self._i)
+
         if block:
             asyncio.run(self.show_async())
+        else:
+            self._idle_thread = threading.Thread(group=None, target=self.is_alive_check,
+                                                 name="%s-reader" % self.name,
+                                                 args=(), kwargs={}, daemon=None)
+            self._idle_thread.start()
+
 
     async def show_async(self):
         self.show(block=False)
@@ -234,3 +253,27 @@ class Chart(abstract.AbstractChart):
         """
         Chart.WV.exit()
         self.is_alive = False
+
+
+if __name__ == '__main__':
+    import polars as pl
+
+    chart = Chart()
+
+    df = pl.from_repr(
+        """
+        ┌─────────────────────┬────────────┬────────────┬────────────┬────────────┬────────┐
+        │ timestamp           ┆ open       ┆ high       ┆ low        ┆ close      ┆ volume │
+        │ ---                 ┆ ---        ┆ ---        ┆ ---        ┆ ---        ┆ ---    │
+        │ datetime[ns]        ┆ f64        ┆ f64        ┆ f64        ┆ f64        ┆ i64    │
+        ╞═════════════════════╪════════════╪════════════╪════════════╪════════════╪════════╡
+        │ 2000-01-01 00:00:00 ┆ 108.240415 ┆ 109.327204 ┆ 102.161826 ┆ 103.776605 ┆ 17202  │
+        │ 2000-01-02 00:00:00 ┆ 108.186052 ┆ 108.791986 ┆ 100.95308  ┆ 103.838989 ┆ 16592  │
+        │ 2000-01-03 00:00:00 ┆ 108.58924  ┆ 107.781164 ┆ 107.975688 ┆ 106.179286 ┆ 18069  │
+        │ 2000-01-04 00:00:00 ┆ 104.446912 ┆ 107.500266 ┆ 103.278712 ┆ 107.192603 ┆ 13141  │
+        │ 2000-01-05 00:00:00 ┆ 105.444439 ┆ 106.155965 ┆ 105.499811 ┆ 105.570471 ┆ 16691  │
+        └─────────────────────┴────────────┴────────────┴────────────┴────────────┴────────┘
+        """
+    ).with_columns(pl.col('timestamp').set_sorted())
+    chart.set(df)
+    chart.show()
